@@ -6,7 +6,7 @@ The data is intended to be used for further analysis, such as anomaly detection 
 This is a [quest_cryptostore](https://github.com/mrzdev/quest_cryptostore) successor, but better suited for this goal.
 
 Usage:
-```bash
+```console
   bash setup.sh
   python query_example.py
 ```
