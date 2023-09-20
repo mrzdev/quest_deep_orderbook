@@ -3,7 +3,7 @@ Store Binance Futures data in QuestDB leveraging the brilliance of [unicorn_bina
 The basic statistics are extracted from high-granularity (max depth) data.    
     
 The data is intended to be used for further analysis, such as anomaly detection techniques i.e. Dissimilarity Index.  
-This is a [quest_cryptostore](https://github.com/mrzdev/quest_cryptostore) successor, but better suited for this goal.
+This is a [quest_cryptostore](https://github.com/mrzdev/quest_cryptostore) successor, better suited for this goal.
 
 Usage:
 ```console
