@@ -1,27 +1,30 @@
-# Copyright (c) 2022-2023, LUCIT Systems and Development (https://www.lucit.tech) and Oliver Zehentleitner
-# All rights reserved.
-#
-# Permission is hereby granted, free of charge, to any person obtaining a
-# copy of this software and associated documentation files (the
-# "Software"), to deal in the Software without restriction, including
-# without limitation the rights to use, copy, modify, merge, publish, dis-
-# tribute, sublicense, and/or sell copies of the Software, and to permit
-# persons to whom the Software is furnished to do so, subject to the fol-
-# lowing conditions:
-#
-# The above copyright notice and this permission notice shall be included
-# in all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABIL-
-# ITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-# SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-# IN THE SOFTWARE.
+"""
+Copyright (c) 2022-2023, LUCIT Systems and Development (https://www.lucit.tech) and Oliver Zehentleitner
+All rights reserved.
+
+ Permission is hereby granted, free of charge, to any person obtaining a
+ copy of this software and associated documentation files (the
+ "Software"), to deal in the Software without restriction, including
+ without limitation the rights to use, copy, modify, merge, publish, dis-
+ tribute, sublicense, and/or sell copies of the Software, and to permit
+ persons to whom the Software is furnished to do so, subject to the fol-
+ lowing conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABIL-
+ITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.
+"""
 
 import pandas as pd
 import polars as pl
+from typing import List, Tuple
 from unicorn_binance_local_depth_cache import BinanceLocalDepthCacheManager, DepthCacheOutOfSync
 from unicorn_binance_websocket_api import BinanceWebSocketApiManager
 from questdb.ingress import Sender, IngressError, TimestampNanos
@@ -46,20 +49,24 @@ class OrderBookStreamer():
     """
     Leveraging the brilliance of unicorn_binance_local_depth_cache project
     (https://github.com/LUCIT-Systems-and-Development/unicorn-binance-local-depth-cache)
-    to get orderbook at max available depth and extract statistics using polars, 
-    then push into QuestDB for further analysis.
+    to get orderbook data at max depth, extract statistics using polars, and push into QuestDB for further analysis.
     """
+
     def __init__(self, exchange="binance.com-futures", markets=['BTCUSDT', 'ETHUSDT']):
         self.exchange = exchange
         self.markets = markets
         self.ubwa = BinanceWebSocketApiManager(exchange=self.exchange, enable_stream_signal_buffer=True)
         self.ubldc = BinanceLocalDepthCacheManager(exchange=self.exchange, ubwa_manager=self.ubwa)
 
-    def get_book(self, market: str):
+    def get_book(self, market: str) -> Tuple[List, List]:
         """
-        Get asks and bids from the given market name
+        Get asks and bids from the given market name.
+
         Args:
-            market (str): market name
+            market (str): The currently processed market.
+
+        Returns:
+            asks, bids (tuple): a two list tuple containing asks and bids data
         """
         while True:
             try:
@@ -71,24 +78,30 @@ class OrderBookStreamer():
                 time.sleep(1)
         return asks, bids
 
-    def create_dfs(self, asks: list, bids: list):
+    def create_dfs(self, asks: List, bids: List) -> Tuple[pl.DataFrame, pl.DataFrame]:
         """
-        Create dataframes from asks and bids list from the Binance Local Depth Cache
+        Create dataframes from obtained asks and bids lists.
         Args:
             asks (list): asks list
             bids (list): bids list
+
+        Returns:
+            df_asks, df_bids (Tuple[pl.DataFrame, pl.DataFrame]): a two polars DataFrames tuple containing asks and bids data
         """
-        print(asks)
         df_asks = pl.DataFrame(asks, schema=[("price", pl.Float32), ("size", pl.Float32)])
         df_bids = pl.DataFrame(bids, schema=[("price", pl.Float32), ("size", pl.Float32)])
         return df_asks, df_bids
 
-    def prepare_columns(self, df: pl.DataFrame, side_prefix: str):
+    def prepare_columns(self, df: pl.DataFrame, side_prefix: str) -> pl.DataFrame:
         """
-        Create unique column names to prepare before pushing to QuestDB
+        Create unique column names to prepare before pushing to QuestDB.
+
         Args:
             df (pl.DataFrame): polars DataFrame
             side_prefix (str): string to prefix column names with
+
+        Returns:
+            price_size_df (pl.DataFrame): a singular polars DataFrame containing asks and bids data
         """
         cols = df.get_column('describe').to_list()
         price_stats = df.select([
@@ -106,12 +119,17 @@ class OrderBookStreamer():
         )
         return price_size_df
 
-    def analyse_book(self, df_asks: pl.DataFrame, df_bids: pl.DataFrame):
+    def analyse_book(self, df_asks: pl.DataFrame, df_bids: pl.DataFrame) -> pl.DataFrame:
         """
-        Extract statistics from the orderbook data stored in polars DataFrame
+        Extract statistics from the orderbook data stored in polars DataFrame.
+
         Args:
-            df_asks (pl.DataFrame): asks polars DataFrame
-            df_bids (pl.DataFrame): bids polars DataFrame
+            df_asks (pl.DataFrame): polars DataFrame with asks data
+            df_bids (pl.DataFrame): polars DataFrame with bids data
+
+        Returns:
+            df (pl.DataFrame): a singular polars DataFrame containing asks and bids data
+
         """
         asks_stats = df_asks.describe()
         bids_stats = df_bids.describe()
@@ -124,9 +142,10 @@ class OrderBookStreamer():
         """
         Insert new row into QuestDB table.
         It will automatically create a new table if it doesn't exists yet.
+
         Args:
-            df (pd.DataFrame): orderbook statistics pandas DataFrame 
-            key (str): what table to write into
+            df (pd.DataFrame): a pandas DataFrame ready for ingestion
+            key (str): a table name to push data into
         """
         logger.info(f"Pushing data to QuestDB table={key}")
         try:
@@ -139,9 +158,9 @@ class OrderBookStreamer():
         except IngressError as e:
             sys.stderr.write(f'Got error: {e}\n')
 
-    def __call__(self):
+    def __call__(self) -> None:
         """
-        Call the orderbook local depth cache streamer
+        Call the OrderBookStreamer.
         """
         for market in self.markets:
             self.ubldc.create_depth_cache(markets=market)
