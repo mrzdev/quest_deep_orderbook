@@ -30,6 +30,6 @@ services:
     image: questdb/questdb:latest
 secrets:
   binance_api_key:
-    file: env/binance_api_key
+    file: secrets/binance_api_key
   binance_secret:
-    file: env/binance_secret
+    file: secrets/binance_secret
