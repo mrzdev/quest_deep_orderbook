@@ -1,6 +1,6 @@
 # quest_deep_orderbook
 
-Streaming orderbook data using python-binance (https://github.com/sammchardy/python-binance)
+Stream orderbook data using python-binance (https://github.com/sammchardy/python-binance)
 at max depth, extract statistics using polars, and push into QuestDB for further analysis.
 
 Usage:
