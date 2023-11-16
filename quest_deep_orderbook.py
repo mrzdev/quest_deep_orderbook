@@ -1,36 +1,12 @@
-"""
-Copyright (c) 2022-2023, LUCIT Systems and Development (https://www.lucit.tech) and Oliver Zehentleitner
-All rights reserved.
-
- Permission is hereby granted, free of charge, to any person obtaining a
- copy of this software and associated documentation files (the
- "Software"), to deal in the Software without restriction, including
- without limitation the rights to use, copy, modify, merge, publish, dis-
- tribute, sublicense, and/or sell copies of the Software, and to permit
- persons to whom the Software is furnished to do so, subject to the fol-
- lowing conditions:
-
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABIL-
-ITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-IN THE SOFTWARE.
-"""
-
 import pandas as pd
 import polars as pl
 from typing import List, Tuple
-from unicorn_binance_local_depth_cache import BinanceLocalDepthCacheManager, DepthCacheOutOfSync
-from unicorn_binance_websocket_api import BinanceWebSocketApiManager
+from binance import AsyncClient
+from binance.depthcache import DepthCache
+from futures import FDCManager
 from questdb.ingress import Sender, IngressError, TimestampNanos
-import logging
-import sys
-import time
+import logging, sys, os, time, asyncio
+from get_docker_secret import get_docker_secret
 
 # Define logger
 logger = logging.getLogger(__name__)
@@ -42,23 +18,25 @@ consoleHandler = logging.StreamHandler(sys.stdout)
 consoleHandler.setFormatter(logFormatter)
 logger.addHandler(consoleHandler)
 
-QUEST_HOST = '127.0.0.1'
-QUEST_PORT = 9009
+# secrets are lower-case, envvars upper-case. 
+# automatic conversion of name can be switched off via autocast_name=False
+
+QUEST_HOST = get_docker_secret('QUEST_HOST', default='127.0.0.1')
+QUEST_PORT = get_docker_secret('QUEST_PORT', default=9009)
+API_KEY = get_docker_secret('BINANCE_API_KEY', default="")
+SECRET_KEY = get_docker_secret('BINANCE_SECRET', default="")
 
 class OrderBookStreamer():
     """
-    Leveraging the brilliance of unicorn_binance_local_depth_cache project
-    (https://github.com/LUCIT-Systems-and-Development/unicorn-binance-local-depth-cache)
-    to get orderbook data at max depth, extract statistics using polars, and push into QuestDB for further analysis.
+    Streaming orderbook data using python-binance (https://github.com/sammchardy/python-binance)
+    at max depth, extract statistics using polars, and push into QuestDB for further analysis.
     """
 
-    def __init__(self, exchange="binance.com-futures", markets=['BTCUSDT', 'ETHUSDT']):
+    def __init__(self, exchange: str ="binance.com-futures", markets : List =['BTCUSDT', 'ETHUSDT']):
         self.exchange = exchange
         self.markets = markets
-        self.ubwa = BinanceWebSocketApiManager(exchange=self.exchange, enable_stream_signal_buffer=True)
-        self.ubldc = BinanceLocalDepthCacheManager(exchange=self.exchange, ubwa_manager=self.ubwa)
 
-    def get_book(self, market: str) -> Tuple[List, List]:
+    def get_book(self, depth_cache) -> Tuple[List, List]:
         """
         Get asks and bids from the given market name.
 
@@ -70,10 +48,10 @@ class OrderBookStreamer():
         """
         while True:
             try:
-                asks = self.ubldc.get_asks(market=market)
-                bids = self.ubldc.get_bids(market=market)
+                asks = depth_cache.get_asks()
+                bids = depth_cache.get_bids()
                 break
-            except DepthCacheOutOfSync:
+            except Exception:
                 logger.info(f"{market} orderbook out of sync")
                 time.sleep(1)
         return asks, bids
@@ -107,15 +85,15 @@ class OrderBookStreamer():
         price_stats = df.select([
             pl.col("price").cast(pl.Float32),
         ]).transpose(include_header=False, column_names=cols).select(
-            pl.all().reverse().prefix("price_")
+            pl.all().reverse().name.prefix("price_")
         )
         size_stats = df.select([
             pl.col("size").cast(pl.Float32),
         ]).transpose(include_header=False, column_names=cols).select(
-            pl.all().reverse().prefix("size_")
+            pl.all().reverse().name.prefix("size_")
         )
         price_size_df = price_stats.hstack(size_stats).select(
-            pl.all().reverse().prefix(side_prefix)
+            pl.all().reverse().name.prefix(side_prefix)
         )
         return price_size_df
 
@@ -158,25 +136,45 @@ class OrderBookStreamer():
         except IngressError as e:
             sys.stderr.write(f'Got error: {e}\n')
 
-    def __call__(self) -> None:
+    def populate_dataframe(self, depth_cache: DepthCache, market: str) -> pd.DataFrame:
+        """
+        Populate the statistics dataframe.
+
+        Args:
+            depth_cache (DepthCache): a pandas DataFrame ready for ingestion
+            market (str): The currently processed market.
+        """
+        asks, bids = self.get_book(depth_cache)
+        df_asks, df_bids = self.create_dfs(asks, bids)
+        df = self.analyse_book(df_asks, df_bids)
+        df = df.with_columns(pl.lit(market).alias('pair'))
+        df = df.with_columns(pl.lit(self.exchange).alias('exchange'))
+        df = df.select(pl.all().name.map(lambda col_name: col_name.replace('%', '')))
+        return df.to_pandas()
+
+    async def callback(self, depth_cache: DepthCache, market: str):
+        """
+        Callback pushing the obtained dataframe to the db.
+
+        Args:
+            depth_cache (DepthCache): a pandas DataFrame ready for ingestion
+            market (str): The currently processed market.
+        """
+        df = self.populate_dataframe(depth_cache, market)
+        self.push_to_db(df)
+
+    async def __call__(self) -> None:
         """
         Call the OrderBookStreamer.
         """
-        for market in self.markets:
-            self.ubldc.create_depth_cache(markets=market)
+        client = await AsyncClient.create(API_KEY, SECRET_KEY)
         while True:
             for market in self.markets:
-                asks, bids = self.get_book(market)
-                df_asks, df_bids = self.create_dfs(asks, bids)
-                df = self.analyse_book(df_asks, df_bids)
-                df = df.with_columns(pl.lit(market).alias('pair'))
-                df = df.with_columns(pl.lit(self.exchange).alias('exchange'))
-                df = df.select(pl.all().map_alias(lambda col_name: col_name.replace('%', '')))
-                self.push_to_db(df.to_pandas())
-            time.sleep(1)
-
+                async with FDCManager(client, symbol=market) as dcm_socket:
+                    depth_cache = await dcm_socket.recv()
+                    await self.callback(depth_cache, market)
 
 if __name__ == "__main__":
     orderbook_streamer = OrderBookStreamer()
-    orderbook_streamer()
-    
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(orderbook_streamer())

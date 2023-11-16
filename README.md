@@ -1,12 +1,11 @@
 # quest_deep_orderbook
-Store Binance Futures orderbook data in QuestDB leveraging the brilliance of [unicorn_binance_local_depth_cache](https://github.com/LUCIT-Systems-and-Development/unicorn-binance-local-depth-cache).    
-The basic statistics are extracted from high-granularity (max depth) data.    
-    
-The data is intended to be used for further analysis, such as anomaly detection techniques i.e. Dissimilarity Index.  
-This is a [quest_cryptostore](https://github.com/mrzdev/quest_cryptostore) successor, better suited for this goal.
+
+Streaming orderbook data using python-binance (https://github.com/sammchardy/python-binance)
+at max depth, extract statistics using polars, and push into QuestDB for further analysis.
 
 Usage:
+Set your Binance Api Key and Secret at env/binance_api_key and env/binance_secret, then run:
+
 ```console
-  bash setup.sh
-  python query_example.py
+  docker compose up
 ```

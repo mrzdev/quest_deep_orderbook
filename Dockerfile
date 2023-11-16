@@ -1,11 +1,11 @@
-FROM python:3.9-slim-bullseye
+FROM python:3.10-slim as build
 
-RUN pip install --no-cache-dir questdb
-RUN pip install --no-cache-dir pyarrow
-RUN pip install --no-cache-dir pandas
-RUN pip install --no-cache-dir polars
-RUN pip install --no-cache-dir unicorn-binance-local-depth-cache
-COPY quest_deep_orderbook.py /quest_deep_orderbook.py
+WORKDIR /opt/app
+COPY . /opt/app
+RUN python -m venv /opt/app/venv
+ENV PATH="/opt/app/venv/bin:$PATH"
 
-CMD ["/quest_deep_orderbook.py"]
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
+
+CMD ["quest_deep_orderbook.py"]
 ENTRYPOINT ["python"]
