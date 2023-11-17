@@ -11,7 +11,7 @@ from get_docker_secret import get_docker_secret
 # Define logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-logging.getLogger("unicorn_binance_local_depth_cache")
+logging.getLogger("binance_local_depth_cache")
 logFormatter = logging.Formatter(\
     "%(asctime)s %(levelname)-8s %(filename)s:%(funcName)s %(message)s")
 consoleHandler = logging.StreamHandler(sys.stdout)
