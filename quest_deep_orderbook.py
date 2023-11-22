@@ -36,7 +36,7 @@ class OrderBookStreamer():
         self.exchange = exchange
         self.markets = markets
 
-    def get_book(self, depth_cache) -> Tuple[List, List]:
+    def get_book(self, depth_cache: DepthCache) -> Tuple[List, List]:
         """
         Get asks and bids from the given market name.
 
