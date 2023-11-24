@@ -11,7 +11,7 @@ from get_docker_secret import get_docker_secret
 # Define logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-logging.getLogger("unicorn_binance_local_depth_cache")
+logging.getLogger("binance_local_depth_cache")
 logFormatter = logging.Formatter(\
     "%(asctime)s %(levelname)-8s %(filename)s:%(funcName)s %(message)s")
 consoleHandler = logging.StreamHandler(sys.stdout)
@@ -36,7 +36,7 @@ class OrderBookStreamer():
         self.exchange = exchange
         self.markets = markets
 
-    def get_book(self, depth_cache) -> Tuple[List, List]:
+    def get_book(self, depth_cache: DepthCache) -> Tuple[List, List]:
         """
         Get asks and bids from the given market name.
 
@@ -152,7 +152,7 @@ class OrderBookStreamer():
         df = df.select(pl.all().name.map(lambda col_name: col_name.replace('%', '')))
         return df.to_pandas()
 
-    async def callback(self, depth_cache: DepthCache, market: str):
+    async def callback(self, depth_cache: DepthCache, market: str) -> None:
         """
         Callback pushing the obtained dataframe to the db.
 
@@ -176,5 +176,4 @@ class OrderBookStreamer():
 
 if __name__ == "__main__":
     orderbook_streamer = OrderBookStreamer()
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(orderbook_streamer())
+    asyncio.run(orderbook_streamer())
