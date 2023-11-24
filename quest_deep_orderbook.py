@@ -5,7 +5,7 @@ from binance import AsyncClient
 from binance.depthcache import DepthCache
 from futures import FDCManager
 from questdb.ingress import Sender, IngressError, TimestampNanos
-import logging, sys, os, time, asyncio
+import warnings, logging, sys, os, time, asyncio
 from get_docker_secret import get_docker_secret
 
 # Define logger
@@ -18,9 +18,11 @@ consoleHandler = logging.StreamHandler(sys.stdout)
 consoleHandler.setFormatter(logFormatter)
 logger.addHandler(consoleHandler)
 
-# secrets are lower-case, envvars upper-case. 
-# automatic conversion of name can be switched off via autocast_name=False
+# Ignore FutureWarning messages for reducing the verbosity.
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
+# Secrets are lower-case, envvars upper-case. 
+# Automatic conversion of name can be switched off via autocast_name=False.
 QUEST_HOST = get_docker_secret('QUEST_HOST', default='127.0.0.1')
 QUEST_PORT = get_docker_secret('QUEST_PORT', default=9009)
 API_KEY = get_docker_secret('BINANCE_API_KEY', default="")
