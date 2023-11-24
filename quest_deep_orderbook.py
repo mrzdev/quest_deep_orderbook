@@ -43,10 +43,10 @@ class OrderBookStreamer():
         Get asks and bids from the given market name.
 
         Args:
-            market (str): The currently processed market.
+            depth_cache (DepthCache): Initialized DepthCache for the given market.
 
         Returns:
-            asks, bids (tuple): a two list tuple containing asks and bids data
+            asks, bids (tuple): a two-list tuple containing asks and bids data
         """
         while True:
             try:
@@ -143,7 +143,7 @@ class OrderBookStreamer():
         Populate the statistics dataframe.
 
         Args:
-            depth_cache (DepthCache): a pandas DataFrame ready for ingestion
+            depth_cache (DepthCache): Initialized DepthCache for the given market.
             market (str): The currently processed market.
         """
         asks, bids = self.get_book(depth_cache)
@@ -159,7 +159,7 @@ class OrderBookStreamer():
         Callback pushing the obtained dataframe to the db.
 
         Args:
-            depth_cache (DepthCache): a pandas DataFrame ready for ingestion
+            depth_cache (DepthCache): Initialized DepthCache for the given market.
             market (str): The currently processed market.
         """
         df = self.populate_dataframe(depth_cache, market)
