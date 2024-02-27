@@ -1,9 +1,8 @@
 import pandas as pd
 import polars as pl
 from typing import List, Tuple
-from binance import AsyncClient
 from binance.depthcache import DepthCache
-from futures import FDCManager
+from futures.depthcache import ThreadedFDCManager
 from questdb.ingress import Sender, IngressError, TimestampNanos
 import warnings, logging, sys, os, time, asyncio
 from get_docker_secret import get_docker_secret
@@ -25,6 +24,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # Automatic conversion of name can be switched off via autocast_name=False.
 QUEST_HOST = get_docker_secret('QUEST_HOST', default='127.0.0.1')
 QUEST_PORT = get_docker_secret('QUEST_PORT', default=9009)
+ORDERBOOK_DEPTH = get_docker_secret('ORDERBOOK_DEPTH', default=20)
 API_KEY = get_docker_secret('BINANCE_API_KEY', default="")
 SECRET_KEY = get_docker_secret('BINANCE_SECRET', default="")
 
@@ -83,7 +83,7 @@ class OrderBookStreamer():
         Returns:
             price_size_df (pl.DataFrame): a singular polars DataFrame containing asks and bids data
         """
-        cols = df.get_column('describe').to_list()
+        cols = df.get_column('statistic').to_list()
         price_stats = df.select([
             pl.col("price").cast(pl.Float32),
         ]).transpose(include_header=False, column_names=cols).select(
@@ -136,7 +136,7 @@ class OrderBookStreamer():
                     symbols=["pair", "exchange"],  # Columns to be inserted as SYMBOL types.
                     at=TimestampNanos.now())  # Timestamp.
         except IngressError as e:
-            sys.stderr.write(f'Got error: {e}\n')
+            logger.error(f"Got error: {e}")
 
     def populate_dataframe(self, depth_cache: DepthCache, market: str) -> pd.DataFrame:
         """
@@ -154,28 +154,32 @@ class OrderBookStreamer():
         df = df.select(pl.all().name.map(lambda col_name: col_name.replace('%', '')))
         return df.to_pandas()
 
-    async def callback(self, depth_cache: DepthCache, market: str) -> None:
+    def callback(self, depth_cache: DepthCache):
         """
         Callback pushing the obtained dataframe to the db.
 
         Args:
-            depth_cache (DepthCache): Initialized DepthCache for the given market.
-            market (str): The currently processed market.
+            depth_cache (DepthCache): a pandas DataFrame ready for ingestion
         """
-        df = self.populate_dataframe(depth_cache, market)
+        df = self.populate_dataframe(depth_cache, depth_cache.symbol)
         self.push_to_db(df)
 
-    async def __call__(self) -> None:
+    def __call__(self) -> None:
         """
         Call the OrderBookStreamer.
         """
-        client = await AsyncClient.create(API_KEY, SECRET_KEY)
-        while True:
-            for market in self.markets:
-                async with FDCManager(client, symbol=market) as dcm_socket:
-                    depth_cache = await dcm_socket.recv()
-                    await self.callback(depth_cache, market)
+        dcm = ThreadedFDCManager(api_key = API_KEY, api_secret = SECRET_KEY)
+        dcm.start()
+
+        for market in self.markets:
+            dcm_name = dcm.start_futures_depth_socket(self.callback, limit = ORDERBOOK_DEPTH, symbol = market)
+
+        dcm.join()
 
 if __name__ == "__main__":
-    orderbook_streamer = OrderBookStreamer()
-    asyncio.run(orderbook_streamer())
+    current_whitelist = [
+        "ETHUSDT",
+        "BTCUSDT"
+    ]
+    orderbook_streamer = OrderBookStreamer(exchange = "binance.com-futures", markets = current_whitelist)
+    orderbook_streamer()
