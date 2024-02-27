@@ -17,7 +17,9 @@ def create_query_string(market) -> str:
         AssertionError: If the specified market is not available in this example.
     """
     assert market in MARKETS, "Not available market in this example"
-    query = f"SELECT timestamp, pair, avg(asks_price_mean) asks_price_mean, avg(asks_price_std) asks_price_std, avg(bids_price_mean) bids_price_mean, avg(bids_price_std) bids_price_std FROM book WHERE pair='{market}' SAMPLE BY 5m FILL(PREV) ALIGN TO CALENDAR WITH OFFSET '00:05'";
+    query = "SELECT timestamp, pair, avg(asks_price_mean) asks_price_mean, avg(asks_price_std) asks_price_std, " \
+    "avg(bids_price_mean) bids_price_mean, avg(bids_price_std) bids_price_std FROM book " \
+    f"WHERE pair='{market}' SAMPLE BY 5m FILL(PREV) ALIGN TO CALENDAR WITH OFFSET '00:05'";
     return query
 
 def get_db_engine(url: str) -> sqlalchemy.Engine:
