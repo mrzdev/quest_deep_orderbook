@@ -27,8 +27,7 @@ QUEST_PORT = get_docker_secret('QUEST_PORT', default=9009)
 
 class OrderBookStreamer():
     """
-    Stream orderbook data using python-binance (https://github.com/sammchardy/python-binance)
-    at max depth, extract statistics using polars, and push into QuestDB for further analysis.
+    Stream orderbook metrics using local depth cache manager and push into QuestDB.
     """
 
     def __init__(self, exchange: str ="binance.com-futures", markets : List =['BTCUSDT', 'ETHUSDT']):
