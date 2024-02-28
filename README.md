@@ -1,9 +1,11 @@
 # quest_deep_orderbook
 
-Stream orderbook data using [python-binance](https://github.com/sammchardy/python-binance/)
-at given depth, extract statistics using polars, and push into QuestDB for further analysis.
-## Usage
-```Set your Binance Api Key and Secret at secrets/binance_api_key and secrets/binance_secret, then run:```    
+Stream orderbook metrics leveraging local depth cache manager and polars, push into QuestDB with the goal of integration with FreqAI strategies.
+
+Currently only MDR (Market Depth Ratio) is implemented.
+
+## Installation
+
 ```console
   docker compose up
 ```
