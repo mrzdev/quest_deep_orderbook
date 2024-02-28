@@ -1,10 +1,10 @@
 import pandas as pd
 import polars as pl
 from typing import List, Tuple
-from binance.depthcache import DepthCache
-from futures.depthcache import ThreadedFDCManager
+from unicorn_binance_local_depth_cache import BinanceLocalDepthCacheManager, DepthCacheOutOfSync
+from unicorn_binance_websocket_api import BinanceWebSocketApiManager
 from questdb.ingress import Sender, IngressError, TimestampNanos
-import warnings, logging, sys, os, time, asyncio
+import warnings, logging, sys, os, time
 from get_docker_secret import get_docker_secret
 
 # Define logger
@@ -24,36 +24,34 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # Automatic conversion of name can be switched off via autocast_name=False.
 QUEST_HOST = get_docker_secret('QUEST_HOST', default='127.0.0.1')
 QUEST_PORT = get_docker_secret('QUEST_PORT', default=9009)
-ORDERBOOK_DEPTH = get_docker_secret('ORDERBOOK_DEPTH', default=20)
-API_KEY = get_docker_secret('BINANCE_API_KEY', default="")
-SECRET_KEY = get_docker_secret('BINANCE_SECRET', default="")
 
 class OrderBookStreamer():
     """
-    Stream orderbook data using python-binance (https://github.com/sammchardy/python-binance)
-    at max depth, extract statistics using polars, and push into QuestDB for further analysis.
+    Stream orderbook metrics using local depth cache manager and push into QuestDB.
     """
 
     def __init__(self, exchange: str ="binance.com-futures", markets : List =['BTCUSDT', 'ETHUSDT']):
         self.exchange = exchange
         self.markets = markets
+        self.ubwa = BinanceWebSocketApiManager(exchange=self.exchange, enable_stream_signal_buffer=True)
+        self.ubldc = BinanceLocalDepthCacheManager(exchange=self.exchange, ubwa_manager=self.ubwa)
 
-    def get_book(self, depth_cache: DepthCache) -> Tuple[List, List]:
+    def get_book(self, market: str) -> Tuple[List, List]:
         """
-        Get asks and bids from the given market name.
+        Get orderbook asks and bids for the given market pair.
 
         Args:
-            depth_cache (DepthCache): Initialized DepthCache for the given market.
+            market (str): The currently processed market.
 
         Returns:
-            asks, bids (tuple): a two-list tuple containing asks and bids data
+            asks, bids (tuple): a two list tuple containing asks and bids data
         """
         while True:
             try:
-                asks = depth_cache.get_asks()
-                bids = depth_cache.get_bids()
+                asks = self.ubldc.get_asks(market=market)
+                bids = self.ubldc.get_bids(market=market)
                 break
-            except Exception:
+            except DepthCacheOutOfSync:
                 logger.info(f"{market} orderbook out of sync")
                 time.sleep(1)
         return asks, bids
@@ -71,52 +69,6 @@ class OrderBookStreamer():
         df_asks = pl.DataFrame(asks, schema=[("price", pl.Float32), ("size", pl.Float32)])
         df_bids = pl.DataFrame(bids, schema=[("price", pl.Float32), ("size", pl.Float32)])
         return df_asks, df_bids
-
-    def prepare_columns(self, df: pl.DataFrame, side_prefix: str) -> pl.DataFrame:
-        """
-        Create unique column names to prepare before pushing to QuestDB.
-
-        Args:
-            df (pl.DataFrame): polars DataFrame
-            side_prefix (str): string to prefix column names with
-
-        Returns:
-            price_size_df (pl.DataFrame): a singular polars DataFrame containing asks and bids data
-        """
-        cols = df.get_column('statistic').to_list()
-        price_stats = df.select([
-            pl.col("price").cast(pl.Float32),
-        ]).transpose(include_header=False, column_names=cols).select(
-            pl.all().reverse().name.prefix("price_")
-        )
-        size_stats = df.select([
-            pl.col("size").cast(pl.Float32),
-        ]).transpose(include_header=False, column_names=cols).select(
-            pl.all().reverse().name.prefix("size_")
-        )
-        price_size_df = price_stats.hstack(size_stats).select(
-            pl.all().reverse().name.prefix(side_prefix)
-        )
-        return price_size_df
-
-    def analyse_book(self, df_asks: pl.DataFrame, df_bids: pl.DataFrame) -> pl.DataFrame:
-        """
-        Extract statistics from the orderbook data stored in polars DataFrame.
-
-        Args:
-            df_asks (pl.DataFrame): polars DataFrame with asks data
-            df_bids (pl.DataFrame): polars DataFrame with bids data
-
-        Returns:
-            df (pl.DataFrame): a singular polars DataFrame containing asks and bids data
-
-        """
-        asks_stats = df_asks.describe()
-        bids_stats = df_bids.describe()
-        formatted_asks_df = self.prepare_columns(asks_stats, 'asks_')
-        formatted_bids_df = self.prepare_columns(bids_stats, 'bids_')
-        df = formatted_asks_df.hstack(formatted_bids_df)
-        return df
 
     def push_to_db(self, df: pd.DataFrame, key: str = 'book') -> None:
         """
@@ -138,43 +90,67 @@ class OrderBookStreamer():
         except IngressError as e:
             logger.error(f"Got error: {e}")
 
-    def populate_dataframe(self, depth_cache: DepthCache, market: str) -> pd.DataFrame:
+    def calculate_mdr(self, df_asks: pl.DataFrame, df_bids: pl.DataFrame, price_range: float = 0.01) -> pl.DataFrame:
         """
-        Populate the statistics dataframe.
+        Calculate MDR (Market Depth Ratio) filtered by cutoffs within price_range from the midpoint.
 
         Args:
-            depth_cache (DepthCache): Initialized DepthCache for the given market.
+            df_asks (pl.DataFrame): a polars DataFrame with asks [price, size] columns.
+            df_bids (pl.DataFrame): a polars DataFrame with bids [price, size] columns.
+            price_range (float): a price range from the midpoint (defaults to 0.01).
+        """
+        best_ask = df_asks[0, 0]
+        best_bid = df_bids[0, 0]
+        mid_price = (best_bid + best_ask) / 2
+        bid_cutoff = mid_price * (1 - price_range)
+        ask_cutoff = mid_price * (1 + price_range)
+        bid_volume = df_bids.select([
+            pl.col("size").filter((pl.col("price") >= bid_cutoff)).sum()
+        ])
+        ask_volume = df_asks.select([
+            pl.col("size").filter((pl.col("price") <= ask_cutoff)).sum()
+        ])
+        mdr = (bid_volume - ask_volume) / (bid_volume + ask_volume)
+        mdr = mdr.rename({"size": "mdr"})
+        return mdr
+
+    def populate_dataframe(self, market: str) -> pd.DataFrame:
+        """
+        Populate the metrics dataframe.
+        Prepare the dataframe for ingestion (include market and exchange information).
+        Convert to a QuestDB's ingress supported pd.DataFrame.
+        
+        Args:
             market (str): The currently processed market.
         """
-        asks, bids = self.get_book(depth_cache)
+        asks, bids = self.get_book(market)
         df_asks, df_bids = self.create_dfs(asks, bids)
-        df = self.analyse_book(df_asks, df_bids)
-        df = df.with_columns(pl.lit(market).alias('pair'))
-        df = df.with_columns(pl.lit(self.exchange).alias('exchange'))
-        df = df.select(pl.all().name.map(lambda col_name: col_name.replace('%', '')))
-        return df.to_pandas()
+        df_mdr = self.calculate_mdr(df_asks, df_bids)
+        df_mdr = df_mdr.with_columns(pl.lit(market).alias('pair'))
+        df_mdr = df_mdr.with_columns(pl.lit(self.exchange).alias('exchange'))
+        return df_mdr.to_pandas()
 
-    def callback(self, depth_cache: DepthCache):
+    def callback(self, market: str):
         """
         Callback pushing the obtained dataframe to the db.
 
         Args:
-            depth_cache (DepthCache): a pandas DataFrame ready for ingestion
+            market (str): The currently processed market.
         """
-        df = self.populate_dataframe(depth_cache, depth_cache.symbol)
+        df = self.populate_dataframe(market)
         self.push_to_db(df)
 
     def __call__(self) -> None:
         """
         Call the OrderBookStreamer.
         """
-        dcm = ThreadedFDCManager(api_key = API_KEY, api_secret = SECRET_KEY)
-        dcm.start()
-
         for market in self.markets:
-            dcm_name = dcm.start_futures_depth_socket(self.callback, limit = ORDERBOOK_DEPTH, symbol = market)
+            self.ubldc.create_depth_cache(markets = market)
 
-        dcm.join()
+        while True:
+            for market in self.markets:
+                time.sleep(1)
+                self.callback(market)
 
 if __name__ == "__main__":
     current_whitelist = [
