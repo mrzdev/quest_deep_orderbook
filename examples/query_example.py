@@ -3,47 +3,51 @@ import sqlalchemy
 
 MARKETS = ["BTCUSDT", "ETHUSDT"]
 
-def create_query_string(market: str) -> str:
+def create_query_string(market) -> str:
     """
     Example QuestDB query string that samples data using 5m timeframe average, autofills NaNs with previous values and aligns to the calendar with 5m offset.
 
     Args:
         market (str): The market to query data for.
         
+    Returns:
+        query (str): The generated QuestDB query string.
+        
     Raises:
         AssertionError: If the specified market is not available in this example.
     """
     assert market in MARKETS, "Not available market in this example"
-    query = f"SELECT timestamp, pair, avg(asks_price_mean) asks_price_mean, avg(asks_price_std) asks_price_std," \
-            "avg(bids_price_mean) bids_price_mean, avg(bids_price_std) bids_price_std FROM book WHERE pair='{market}'" \
-            "SAMPLE BY 5m FILL(PREV) ALIGN TO CALENDAR WITH OFFSET '00:05'";
+    query = f"SELECT timestamp, pair, avg(mdr) mdr FROM book WHERE pair='{market}' SAMPLE BY 15m LIMIT -1;";
     return query
 
-def get_db_engine(db_url: str) -> sqlalchemy.Engine:
+def get_db_engine(url: str) -> sqlalchemy.Engine:
     """
     Connect to QuestDB and return the engine instance.
 
     Args:
-        db_url (str): The QuestDB url.
+        url (str): The QuestDB url.
+
+    Returns:
+        engine (sqlalchemy.Engine): The obtained sqlalchemy engine.
 
     Raises:
         sqlalchemy.exc.DatabaseError: If the database connection wasn't estabilished.
     """
-    engine = sqlalchemy.create_engine(db_url)
+    engine = sqlalchemy.create_engine(url)
     return engine
 
-def query_db(db_url: str, market: str) -> pd.DataFrame:
+def query_db(url: str, market: str) -> pd.DataFrame:
     """
     Query QuestDB per singular market.
 
     Args:
-        db_url (str): The QuestDB PostgreSQL url.
+        url (str): The QuestDB url.
         market (str): The market to query data for.
 
     Returns:
         orderbook_data (pd.DataFrame): The orderbook data stored in pandas DataFrame.
     """
-    engine = get_db_engine(db_url)
+    engine = get_db_engine(url)
     query_string = create_query_string(market)
     
     try:
