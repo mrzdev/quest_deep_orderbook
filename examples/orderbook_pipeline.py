@@ -42,7 +42,7 @@ class OBPipeline():
         mdr = orderbook.mdr
         return mdr
 
-    def parse_db(self, pair: str) -> pd.DataFrame:
+    def query_db(self, pair: str) -> pd.DataFrame:
         """
         Create SQL engine and query QuestDB.
         Pair name example: "BTCUSDT".
@@ -50,6 +50,7 @@ class OBPipeline():
         Args:
             pair (str): The pair name used in QuestDB.
         """
+        orderbook = pd.DataFrame()
         engine = create_engine(self.db_url)
         query_string = self.create_query_string(pair)
         try:
@@ -65,6 +66,6 @@ class OBPipeline():
         Obtain orderbook metrics for the currently processed pair.
         """
         pair_in_db = self.convert_name(pair)
-        df = self.parse_db(pair_in_db)
+        df = self.query_db(pair_in_db)
         mdr = self.market_depth_ratio(df)
         return mdr
