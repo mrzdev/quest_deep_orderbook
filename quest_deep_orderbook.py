@@ -4,7 +4,7 @@ from typing import List, Tuple
 from unicorn_binance_local_depth_cache import BinanceLocalDepthCacheManager, DepthCacheOutOfSync
 from unicorn_binance_websocket_api import BinanceWebSocketApiManager
 from questdb.ingress import Sender, IngressError, TimestampNanos
-import warnings, logging, sys, os, time, asyncio
+import warnings, logging, sys, os, time
 from get_docker_secret import get_docker_secret
 
 # Define logger
@@ -145,13 +145,13 @@ class OrderBookStreamer():
         """
         Call the OrderBookStreamer.
         """
-        dcm = ThreadedFDCManager(api_key = API_KEY, api_secret = SECRET_KEY)
-        dcm.start()
-
         for market in self.markets:
-            dcm_name = dcm.start_futures_depth_socket(self.callback, limit = ORDERBOOK_DEPTH, symbol = market)
+            self.ubldc.create_depth_cache(markets = market)
 
-        dcm.join()
+        while True:
+            for market in self.markets:
+                time.sleep(1)
+                self.callback(market)
 
 if __name__ == "__main__":
     current_whitelist = [
