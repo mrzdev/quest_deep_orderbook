@@ -37,22 +37,22 @@ class OrderBookStreamer():
         self.ubwa = BinanceWebSocketApiManager(exchange=self.exchange, enable_stream_signal_buffer=True)
         self.ubldc = BinanceLocalDepthCacheManager(exchange=self.exchange, ubwa_manager=self.ubwa)
 
-    def get_book(self, depth_cache: DepthCache) -> Tuple[List, List]:
+    def get_book(self, market: str) -> Tuple[List, List]:
         """
-        Get asks and bids from the given market name.
+        Get orderbook asks and bids for the given market pair.
 
         Args:
-            depth_cache (DepthCache): Initialized DepthCache for the given market.
+            market (str): The currently processed market.
 
         Returns:
-            asks, bids (tuple): a two-list tuple containing asks and bids data
+            asks, bids (tuple): a two list tuple containing asks and bids data
         """
         while True:
             try:
-                asks = depth_cache.get_asks()
-                bids = depth_cache.get_bids()
+                asks = self.ubldc.get_asks(market=market)
+                bids = self.ubldc.get_bids(market=market)
                 break
-            except Exception:
+            except DepthCacheOutOfSync:
                 logger.info(f"{market} orderbook out of sync")
                 time.sleep(1)
         return asks, bids
