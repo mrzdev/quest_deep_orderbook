@@ -34,6 +34,8 @@ class OrderBookStreamer():
     def __init__(self, exchange: str ="binance.com-futures", markets : List =['BTCUSDT', 'ETHUSDT']):
         self.exchange = exchange
         self.markets = markets
+        self.ubwa = BinanceWebSocketApiManager(exchange=self.exchange, enable_stream_signal_buffer=True)
+        self.ubldc = BinanceLocalDepthCacheManager(exchange=self.exchange, ubwa_manager=self.ubwa)
 
     def get_book(self, depth_cache: DepthCache) -> Tuple[List, List]:
         """
