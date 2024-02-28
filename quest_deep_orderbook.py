@@ -71,52 +71,6 @@ class OrderBookStreamer():
         df_bids = pl.DataFrame(bids, schema=[("price", pl.Float32), ("size", pl.Float32)])
         return df_asks, df_bids
 
-    def prepare_columns(self, df: pl.DataFrame, side_prefix: str) -> pl.DataFrame:
-        """
-        Create unique column names to prepare before pushing to QuestDB.
-
-        Args:
-            df (pl.DataFrame): polars DataFrame
-            side_prefix (str): string to prefix column names with
-
-        Returns:
-            price_size_df (pl.DataFrame): a singular polars DataFrame containing asks and bids data
-        """
-        cols = df.get_column('statistic').to_list()
-        price_stats = df.select([
-            pl.col("price").cast(pl.Float32),
-        ]).transpose(include_header=False, column_names=cols).select(
-            pl.all().reverse().name.prefix("price_")
-        )
-        size_stats = df.select([
-            pl.col("size").cast(pl.Float32),
-        ]).transpose(include_header=False, column_names=cols).select(
-            pl.all().reverse().name.prefix("size_")
-        )
-        price_size_df = price_stats.hstack(size_stats).select(
-            pl.all().reverse().name.prefix(side_prefix)
-        )
-        return price_size_df
-
-    def analyse_book(self, df_asks: pl.DataFrame, df_bids: pl.DataFrame) -> pl.DataFrame:
-        """
-        Extract statistics from the orderbook data stored in polars DataFrame.
-
-        Args:
-            df_asks (pl.DataFrame): polars DataFrame with asks data
-            df_bids (pl.DataFrame): polars DataFrame with bids data
-
-        Returns:
-            df (pl.DataFrame): a singular polars DataFrame containing asks and bids data
-
-        """
-        asks_stats = df_asks.describe()
-        bids_stats = df_bids.describe()
-        formatted_asks_df = self.prepare_columns(asks_stats, 'asks_')
-        formatted_bids_df = self.prepare_columns(bids_stats, 'bids_')
-        df = formatted_asks_df.hstack(formatted_bids_df)
-        return df
-
     def push_to_db(self, df: pd.DataFrame, key: str = 'book') -> None:
         """
         Insert new row into QuestDB table.
