@@ -10,7 +10,7 @@ class OBPipeline():
         self.db_url = 'postgresql://admin:quest@localhost:8812/qdb'
 
     @staticmethod
-    def convert_name(pair: str):
+    def convert_name(pair: str) -> str:
         """
         Convert pair name from Freqtrade naming convention to the one stored in the database.
         Example: "BTC/USDT:USDT" -> "BTC/USDT".
@@ -21,7 +21,7 @@ class OBPipeline():
         pair_in_db = pair.split(":")[0].replace("/", "")
         return pair_in_db
 
-    def create_query_string(self, pair: str):
+    def create_query_string(self, pair: str) -> str:
         """
         Create a query string to get sampled data from QuestDB. 
         Pair name example: "BTCUSDT".
