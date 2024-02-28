@@ -12,4 +12,7 @@ freqtrade trade --strategy FreqaiExampleStrategy \
                 --dry-run
 ```
 
+Now `orderbook_mdr` becomes available to the strat and can be plotted:
+![image](https://github.com/mrzdev/quest_deep_orderbook/assets/106373816/19504090-f6d3-4012-a0fa-d5928b89c489)
+
 *Note*: Following model is merely an example.
