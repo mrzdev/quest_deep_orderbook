@@ -5,7 +5,11 @@ Steps to include orderbook Market Depth Ratio in FreqAI strategy (example):
 
 Then run:
 ```bash
-freqtrade trade --strategy FreqaiExampleStrategy --config user_data/configs/config_ob_freqai.example.json --freqaimodel XGBoostRegressorOBExample --dry-run --db-url sqlite:///tradesv3_obtest.dry_run.sqlite
+freqtrade trade --strategy FreqaiExampleStrategy \
+                --config user_data/configs/config_ob_freqai.example.json \
+                --freqaimodel XGBoostRegressorOBExample \
+                --db-url sqlite:///tradesv3_obtest.dry_run.sqlite \
+                --dry-run
 ```
 
 *Note*: Following model is merely an example.
