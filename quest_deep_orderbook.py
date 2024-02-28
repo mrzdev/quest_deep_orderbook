@@ -1,8 +1,8 @@
 import pandas as pd
 import polars as pl
 from typing import List, Tuple
-from binance.depthcache import DepthCache
-from futures.depthcache import ThreadedFDCManager
+from unicorn_binance_local_depth_cache import BinanceLocalDepthCacheManager, DepthCacheOutOfSync
+from unicorn_binance_websocket_api import BinanceWebSocketApiManager
 from questdb.ingress import Sender, IngressError, TimestampNanos
 import warnings, logging, sys, os, time, asyncio
 from get_docker_secret import get_docker_secret
@@ -24,9 +24,6 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # Automatic conversion of name can be switched off via autocast_name=False.
 QUEST_HOST = get_docker_secret('QUEST_HOST', default='127.0.0.1')
 QUEST_PORT = get_docker_secret('QUEST_PORT', default=9009)
-ORDERBOOK_DEPTH = get_docker_secret('ORDERBOOK_DEPTH', default=20)
-API_KEY = get_docker_secret('BINANCE_API_KEY', default="")
-SECRET_KEY = get_docker_secret('BINANCE_SECRET', default="")
 
 class OrderBookStreamer():
     """
