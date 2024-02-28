@@ -91,6 +91,30 @@ class OrderBookStreamer():
         except IngressError as e:
             logger.error(f"Got error: {e}")
 
+    def calculate_mdr(self, df_asks: pl.DataFrame, df_bids: pl.DataFrame, price_range: float = 0.01) -> pl.DataFrame:
+        """
+        Calculate MDR (Market Depth Ratio) filtered by cutoffs within price_range from the midpoint.
+
+        Args:
+            df_asks (pl.DataFrame): a polars DataFrame with asks [price, size] columns.
+            df_bids (pl.DataFrame): a polars DataFrame with bids [price, size] columns.
+            price_range (float): a price range from the midpoint (defaults to 0.01).
+        """
+        best_ask = df_asks[0, 0]
+        best_bid = df_bids[0, 0]
+        mid_price = (best_bid + best_ask) / 2
+        bid_cutoff = mid_price * (1 - price_range)
+        ask_cutoff = mid_price * (1 + price_range)
+        bid_volume = df_bids.select([
+            pl.col("size").filter((pl.col("price") >= bid_cutoff)).sum()
+        ])
+        ask_volume = df_asks.select([
+            pl.col("size").filter((pl.col("price") <= ask_cutoff)).sum()
+        ])
+        mdr = (bid_volume - ask_volume) / (bid_volume + ask_volume)
+        mdr = mdr.rename({"size": "mdr"})
+        return mdr
+
     def populate_dataframe(self, depth_cache: DepthCache, market: str) -> pd.DataFrame:
         """
         Populate the statistics dataframe.
