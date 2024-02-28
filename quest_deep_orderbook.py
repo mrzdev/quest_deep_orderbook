@@ -115,21 +115,21 @@ class OrderBookStreamer():
         mdr = mdr.rename({"size": "mdr"})
         return mdr
 
-    def populate_dataframe(self, depth_cache: DepthCache, market: str) -> pd.DataFrame:
+    def populate_dataframe(self, market: str) -> pd.DataFrame:
         """
-        Populate the statistics dataframe.
-
+        Populate the metrics dataframe.
+        Prepare the dataframe for ingestion (include market and exchange information).
+        Convert to a QuestDB's ingress supported pd.DataFrame.
+        
         Args:
-            depth_cache (DepthCache): Initialized DepthCache for the given market.
             market (str): The currently processed market.
         """
-        asks, bids = self.get_book(depth_cache)
+        asks, bids = self.get_book(market)
         df_asks, df_bids = self.create_dfs(asks, bids)
-        df = self.analyse_book(df_asks, df_bids)
-        df = df.with_columns(pl.lit(market).alias('pair'))
-        df = df.with_columns(pl.lit(self.exchange).alias('exchange'))
-        df = df.select(pl.all().name.map(lambda col_name: col_name.replace('%', '')))
-        return df.to_pandas()
+        df_mdr = self.calculate_mdr(df_asks, df_bids)
+        df_mdr = df_mdr.with_columns(pl.lit(market).alias('pair'))
+        df_mdr = df_mdr.with_columns(pl.lit(self.exchange).alias('exchange'))
+        return df_mdr.to_pandas()
 
     def callback(self, depth_cache: DepthCache):
         """
