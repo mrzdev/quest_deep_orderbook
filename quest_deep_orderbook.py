@@ -131,14 +131,14 @@ class OrderBookStreamer():
         df_mdr = df_mdr.with_columns(pl.lit(self.exchange).alias('exchange'))
         return df_mdr.to_pandas()
 
-    def callback(self, depth_cache: DepthCache):
+    def callback(self, market: str):
         """
         Callback pushing the obtained dataframe to the db.
 
         Args:
-            depth_cache (DepthCache): a pandas DataFrame ready for ingestion
+            market (str): The currently processed market.
         """
-        df = self.populate_dataframe(depth_cache, depth_cache.symbol)
+        df = self.populate_dataframe(market)
         self.push_to_db(df)
 
     def __call__(self) -> None:
