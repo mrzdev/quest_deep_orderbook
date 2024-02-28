@@ -12,14 +12,8 @@ services:
     tty: true
     network_mode: "host"
     environment:
-      BINANCE_API_KEY_FILE: /run/secrets/binance_api_key
-      BINANCE_API_SECRET_FILE: /run/secrets/binance_secret
-      ORDERBOOK_DEPTH: 20
       QUEST_HOST: "127.0.0.1"
       QUEST_PORT: 9009
-    secrets:
-      - binance_api_key
-      - binance_secret
   questdb:
     ports:
       - 9000:9000
@@ -29,8 +23,3 @@ services:
     volumes:
       - $PWD:/var/lib/questdb
     image: questdb/questdb:latest
-secrets:
-  binance_api_key:
-    file: secrets/binance_api_key
-  binance_secret:
-    file: secrets/binance_secret
