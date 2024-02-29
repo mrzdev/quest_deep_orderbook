@@ -13,7 +13,7 @@ class OBPipeline():
     def convert_name(pair: str) -> str:
         """
         Convert pair name from Freqtrade naming convention to the one stored in the database.
-        Example: "BTC/USDT:USDT" -> "BTC/USDT".
+        Example: "BTC/USDT:USDT" -> "BTCUSDT".
 
         Args:
             pair (str): The pair name used in Freqtrade.
