@@ -130,7 +130,7 @@ class OrderBookStreamer():
         df_mdr = df_mdr.with_columns(pl.lit(self.exchange).alias('exchange'))
         return df_mdr.to_pandas()
 
-    def callback(self, market: str):
+    def callback(self, market: str) -> None:
         """
         Callback pushing the obtained dataframe to the db.
 
