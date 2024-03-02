@@ -64,6 +64,9 @@ class OBPipeline():
     def __call__(self, pair: str) -> pd.Series:
         """
         Obtain orderbook metrics for the currently processed pair.
+
+        Args:
+            pair (str): The pair name used in Freqtrade.
         """
         pair_in_db = self.convert_name(pair)
         df = self.query_db(pair_in_db)
