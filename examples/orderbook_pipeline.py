@@ -21,15 +21,12 @@ class OBPipeline():
         pair_in_db = pair.split(":")[0].replace("/", "")
         return pair_in_db
 
-    def create_query_string(self, pair: str) -> str:
+    def create_query_string(self) -> str:
         """
         Create a query string to get sampled data from QuestDB. 
         Pair name example: "BTCUSDT".
-
-        Args:
-            pair (str): The pair name used in QuestDB.
         """
-        query = f"SELECT timestamp, pair, avg(mdr) mdr FROM book WHERE pair='{pair}' SAMPLE BY 15m LIMIT -1;";
+        query = "SELECT timestamp, pair, mdr FROM book WHERE pair=%s LIMIT -1";
         return query
     
     def market_depth_ratio(self, orderbook: pd.DataFrame) -> pd.Series:
@@ -52,10 +49,10 @@ class OBPipeline():
         """
         orderbook = pd.DataFrame()
         engine = create_engine(self.db_url)
-        query_string = self.create_query_string(pair)
+        query_string = self.create_query_string()
         try:
             with engine.connect() as conn:
-                orderbook = pd.read_sql(query_string, con=conn)
+                orderbook = pd.read_sql(query_string, con=conn, params=(pair,))
         finally:
             if engine:
                 engine.dispose()
