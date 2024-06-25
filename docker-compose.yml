@@ -13,7 +13,7 @@ services:
     network_mode: "host"
     environment:
       QUEST_HOST: "127.0.0.1"
-      QUEST_PORT: 9009
+      QUEST_PORT: 9000
   questdb:
     ports:
       - 9000:9000

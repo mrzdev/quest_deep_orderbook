@@ -17,7 +17,7 @@ def create_query_string(market) -> str:
         AssertionError: If the specified market is not available in this example.
     """
     assert market in MARKETS, "Not available market in this example"
-    query = f"SELECT timestamp, pair, avg(mdr) mdr FROM book WHERE pair='{market}' SAMPLE BY 15m LIMIT -1;";
+    query = "SELECT timestamp, pair, mdr FROM book WHERE pair=%s LIMIT -1"
     return query
 
 def get_db_engine(url: str) -> sqlalchemy.Engine:
@@ -52,7 +52,7 @@ def query_db(url: str, market: str) -> pd.DataFrame:
     
     try:
         with engine.connect() as conn:
-            orderbook_data = pd.read_sql(query_string, con=conn)
+            orderbook_data = pd.read_sql(query_string, con=conn, params=(market,))
     except sqlalchemy.exc.DatabaseError as err:
         print(err)
         orderbook_data = pd.DataFrame()
