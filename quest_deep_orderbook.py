@@ -23,7 +23,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # Secrets are lower-case, envvars upper-case. 
 # Automatic conversion of name can be switched off via autocast_name=False.
 QUEST_HOST = get_docker_secret('QUEST_HOST', default='127.0.0.1')
-QUEST_PORT = get_docker_secret('QUEST_PORT', default=9009)
+QUEST_PORT = get_docker_secret('QUEST_PORT', default=9000)
 
 class OrderBookStreamer():
     """
@@ -81,7 +81,7 @@ class OrderBookStreamer():
         """
         logger.info(f"Pushing data to QuestDB table={key}")
         try:
-            with Sender(QUEST_HOST, QUEST_PORT) as sender:
+            with Sender.from_conf(f"http::addr={QUEST_HOST}:{QUEST_PORT};") as sender:
                 sender.dataframe(
                     df,
                     table_name=key,  # Table name to insert into.
